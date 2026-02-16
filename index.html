@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fortux Chat - Platinum Edition</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    
+    <style>
+        :root {
+            --header-bg: #2d3436;
+            --sent-bg: #2d3436;
+            --recv-bg: #f1f2f6;
+            --accent-blue: #34b7f1;
+            --verified: #1d9bf0;
+            --gold: #dfe6e9; /* Default */
+        }
+
+        * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; -webkit-tap-highlight-color: transparent; user-select: none; }
+        body { margin: 0; background: #dfe6e9; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
+        .app-container { width: 100%; max-width: 500px; background: #fff; display: flex; flex-direction: column; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        
+        .screen { display: none; flex-direction: column; height: 100%; width: 100%; animation: fadeIn 0.2s ease; }
+        .active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Header Styles */
+        .header { background: var(--header-bg); color: white; padding: 12px 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; z-index: 10; transition: all 0.5s ease; }
+        .header-info { flex: 1; overflow: hidden; }
+        .header-name { font-weight: 600; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+        .header-status { font-size: 11px; opacity: 0.8; }
+
+        /* Verified Badge */
+        .v-badge { background: var(--verified); color: white; font-size: 9px; width: 15px; height: 15px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
+        .gold-v { background: #f1c40f !important; color: #2d3436 !important; box-shadow: 0 0 5px #f1c40f; }
+
+        /* Chat & Message Bubbles */
+        .chat-box { flex: 1; overflow-y: auto; padding: 15px; background: #f7f7f7; display: flex; flex-direction: column; gap: 12px; transition: background 0.5s ease; }
+        
+        /* Istimewa Mode for Fathur */
+        .fathur-mode .header { background: #1e272e; border-bottom: 2px solid #f1c40f; box-shadow: 0 4px 15px rgba(241, 196, 15, 0.2); }
+        .fathur-mode .chat-box { background: linear-gradient(135deg, #f7f7f7 0%, #fff9e6 100%); animation: goldenGlow 1.5s infinite alternate; }
+        @keyframes goldenGlow { from { box-shadow: inset 0 0 0px transparent; } to { box-shadow: inset 0 0 20px rgba(241, 196, 15, 0.1); } }
+
+        .msg { padding: 8px 12px; border-radius: 15px; max-width: 80%; font-size: 14.5px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .sent { align-self: flex-end; background: var(--sent-bg); color: white; border-bottom-right-radius: 2px; }
+        .received { align-self: flex-start; background: var(--recv-bg); color: #2d3436; border-bottom-left-radius: 2px; }
+        
+        /* Image Container */
+        .img-container { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+        .img-msg { width: 100%; border-radius: 10px; display: block; object-fit: cover; }
+        .dl-btn-wrapper { width: 100%; display: flex; justify-content: center; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .received .dl-btn-wrapper { border-top: 1px solid rgba(0,0,0,0.05); }
+        
+        .dl-btn { 
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            width: 100%; padding: 10px; background: rgba(0,0,0,0.15); 
+            color: inherit; text-decoration: none; font-size: 13px; font-weight: 600;
+            border-radius: 8px; border: 1px solid currentColor; cursor: pointer;
+        }
+
+        .meta { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 5px; font-size: 10px; opacity: 0.8; }
+        .tick-blue { color: var(--accent-blue); font-weight: bold; }
+        .tick-grey { color: #b2bec3; font-weight: bold; }
+
+        /* Modals */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
+        .card { background: white; width: 80%; max-width: 300px; border-radius: 15px; padding: 20px; }
+        .card button { width: 100%; padding: 12px; border: none; background: none; text-align: left; font-size: 16px; cursor: pointer; }
+
+        /* Inbox List */
+        .chat-item { padding: 15px; border-bottom: 1px solid #f8f9fa; display: flex; align-items: center; justify-content: space-between; }
+        .item-left { display: flex; align-items: center; gap: 12px; flex: 1; cursor: pointer; }
+        .avatar { width: 45px; height: 45px; border-radius: 14px; object-fit: cover; background: #eee; }
+
+        /* Input Area */
+        .input-area { padding: 10px; background: white; display: flex; align-items: center; gap: 8px; border-top: 1px solid #eee; }
+        .input-pill { background: #f1f2f6; border-radius: 25px; flex: 1; display: flex; padding: 0 15px; align-items: center; }
+        .input-pill input { flex: 1; border: none; background: transparent; padding: 10px 0; outline: none; user-select: text; font-size: 15px; }
+        
+        /* Password Eye */
+        .pass-wrapper { position: relative; width: 100%; margin-bottom: 12px; }
+        .eye-btn { position: absolute; right: 15px; top: 14px; cursor: pointer; color: #777; z-index: 5; padding: 0 5px; }
+
+        /* Profile Area */
+        .profile-container { position: relative; display: inline-block; cursor: pointer; margin-bottom: 10px; }
+        .profile-overlay { position: absolute; bottom: 0; right: 0; background: var(--accent-blue); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div id="del-modal" class="modal">
+        <div class="card">
+            <h4 style="margin:0 0 15px 0;">Hapus pesan?</h4>
+            <button onclick="confirmDelMe()">Hapus untuk saya</button>
+            <button id="btn-del-all" style="color:red;" onclick="confirmDelAll()">Hapus untuk semua</button>
+            <button style="color:#888; text-align:right;" onclick="closeDelModal()">BATAL</button>
+        </div>
+    </div>
+
+    <div id="login-screen" class="screen active" style="justify-content: center; padding: 40px;">
+        <div style="text-align:center;">
+            <h1 style="margin-bottom: 5px;">Fortux Chat</h1>
+            <p style="font-size: 13px; color: #636e72; margin-bottom: 25px;">Masuk atau Daftar otomatis</p>
+            <input type="text" id="username" placeholder="Username" style="width:100%; padding:14px; border-radius:12px; border:1px solid #ddd; margin-bottom:12px; outline:none;">
+            
+            <div class="pass-wrapper">
+                <input type="password" id="password" placeholder="Password" style="width:100%; padding:14px; border-radius:12px; border:1px solid #ddd; outline:none;">
+                <span class="eye-btn" onclick="togglePass('password')">👁️</span>
+            </div>
+            
+            <div class="pass-wrapper">
+                <input type="password" id="confirm_password" placeholder="Konfirmasi Password (jika baru)" style="width:100%; padding:14px; border-radius:12px; border:1px solid #ddd; outline:none;">
+                <span class="eye-btn" onclick="togglePass('confirm_password')">👁️</span>
+            </div>
+
+            <button onclick="handleAuth()" style="background:var(--header-bg); color:white; border:none; padding:15px; width:100%; border-radius:12px; font-weight:bold; cursor:pointer; margin-top:10px;">LANJUTKAN</button>
+        </div>
+    </div>
+
+    <div id="inbox-screen" class="screen">
+        <div class="header">
+            <img src="" id="my-pic-head" class="avatar" style="width:35px; height:35px; cursor:pointer;" onclick="switchScreen('profile-screen')">
+            <div class="header-info"><span class="header-name">Chat</span></div>
+            <div style="display:flex; gap:18px; align-items:center;">
+                <span onclick="switchScreen('archive-screen')" style="cursor:pointer; font-size:20px;">📁</span>
+                <span onclick="startChat()" style="cursor:pointer; font-size:26px;">+</span>
+            </div>
+        </div>
+        <div id="inbox-list" style="flex:1; overflow-y:auto;"></div>
+    </div>
+
+    <div id="archive-screen" class="screen">
+        <div class="header">
+            <span onclick="switchScreen('inbox-screen')" style="cursor:pointer; font-size:20px;">←</span>
+            <div class="header-info"><span class="header-name">Arsip</span></div>
+        </div>
+        <div id="archive-list" style="flex:1; overflow-y:auto;"></div>
+    </div>
+
+    <div id="chat-screen" class="screen">
+        <div class="header">
+            <span onclick="goBack()" style="cursor:pointer; font-size:20px;">←</span>
+            <img src="" id="target-pic" class="avatar" style="width:35px; height:35px;">
+            <div class="header-info">
+                <span id="target-name" class="header-name"></span>
+                <span id="target-status" class="header-status">Offline</span>
+            </div>
+        </div>
+        <div id="chat-box" class="chat-box"></div>
+        <div class="input-area">
+            <input type="file" id="img-send" style="display:none;" accept="image/*" onchange="sendImg(this)">
+            <button onclick="document.getElementById('img-send').click()" style="background:none; border:none; font-size:22px; cursor:pointer;">📷</button>
+            <div class="input-pill">
+                <input type="text" id="msg-input" placeholder="Tulis pesan..." oninput="updateTyping()">
+            </div>
+            <button onclick="sendMsg()" style="background:var(--header-bg); color:white; border:none; width:40px; height:40px; border-radius:50%; cursor:pointer;">➤</button>
+        </div>
+    </div>
+
+    <div id="profile-screen" class="screen">
+        <div class="header"><span onclick="goBack()" style="cursor:pointer; font-size:20px;">←</span> <span style="font-weight:600;">Profil Saya</span></div>
+        <div style="text-align:center; padding:40px;">
+            <input type="file" id="profile-upload" style="display:none;" accept="image/*" onchange="updateProfilePic(this)">
+            <div class="profile-container" onclick="document.getElementById('profile-upload').click()">
+                <img src="" id="my-pic-large" style="width:130px; height:130px; border-radius:35px; border:4px solid #eee; object-fit:cover;">
+                <div class="profile-overlay">✎</div>
+            </div>
+            <h3 id="my-user-display" style="margin-top:15px; color:var(--header-bg); font-size:22px;"></h3>
+            <p style="color:#888; font-size:13px; margin-bottom:30px;">Ketuk foto untuk mengganti profil</p>
+            <button onclick="logout()" style="color:red; border:2px solid red; background:none; padding:12px 30px; border-radius:12px; font-weight:bold; cursor:pointer;">LOGOUT AKUN</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyC_nZySU9C2Llnrk5Vf6rtXudCuc00Z3Jg",
+        authDomain: "fortux-575a0.firebaseapp.com",
+        databaseURL: "https://fortux-575a0-default-rtdb.firebaseio.com",
+        projectId: "fortux-575a0",
+        storageBucket: "fortux-575a0.firebasestorage.app",
+        messagingSenderId: "68768857830",
+        appId: "1:68768857830:web:695a4fada5ca279d0bc527"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    
+    let myUser = "", friendUser = "", typingTO, selectedMsgId = "";
+    const defPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+
+    // --- AUTO LOGIN ---
+    window.onload = () => {
+        const saved = localStorage.getItem('fortux_user');
+        if(saved) { myUser = saved; startApp(); }
+    };
+
+    function togglePass(id) {
+        const input = document.getElementById(id);
+        input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    function formatName(u) {
+        if(u === 'fathurrizamreal') return `Fathur Rizam <span class="v-badge gold-v">✓</span>`;
+        return u;
+    }
+
+    function switchScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        // Reset special mode if exiting chat
+        if(id !== 'chat-screen') document.getElementById('chat-screen').classList.remove('fathur-mode');
+    }
+
+    function handleAuth() {
+        const u = document.getElementById('username').value.trim().toLowerCase();
+        const p = document.getElementById('password').value.trim();
+        const cp = document.getElementById('confirm_password').value.trim();
+        if(!u || !p) return alert("Isi field!");
+
+        db.ref('users/'+u).once('value', s => {
+            if(!s.exists()) {
+                if(p !== cp) return alert("Password tidak cocok!");
+                db.ref('users/'+u).set({ password: p, pic: defPic, online: true }).then(() => {
+                    localStorage.setItem('fortux_user', u);
+                    myUser = u; startApp();
+                });
+            } else {
+                if(s.val().password === p) {
+                    localStorage.setItem('fortux_user', u);
+                    myUser = u; startApp();
+                } else { alert("Password salah!"); }
+            }
+        });
+    }
+
+    function logout() {
+        if(confirm("Logout?")) {
+            localStorage.removeItem('fortux_user');
+            location.reload();
+        }
+    }
+
+    function startApp() {
+        switchScreen('inbox-screen');
+        document.getElementById('my-user-display').innerText = myUser;
+        db.ref('users/'+myUser).update({ online: true });
+        db.ref('users/'+myUser).onDisconnect().update({ online: false, lastSeen: firebase.database.ServerValue.TIMESTAMP });
+        loadInbox();
+        db.ref('users/'+myUser+'/pic').on('value', s => {
+            const p = s.val() || defPic;
+            document.getElementById('my-pic-head').src = p;
+            document.getElementById('my-pic-large').src = p;
+        });
+    }
+
+    function loadInbox() {
+        db.ref('inbox/'+myUser).on('value', snap => {
+            const list = document.getElementById('inbox-list');
+            const arcList = document.getElementById('archive-list');
+            list.innerHTML = ""; arcList.innerHTML = "";
+            snap.forEach(c => {
+                const isArc = c.val() === 'archived';
+                db.ref('users/'+c.key).once('value', us => {
+                    const div = document.createElement('div');
+                    div.className = 'chat-item';
+                    div.innerHTML = `
+                        <div class="item-left" onclick="openChat('${c.key}', '${us.val()?.pic||defPic}')">
+                            <img src="${us.val()?.pic||defPic}" class="avatar">
+                            <b>${formatName(c.key)}</b>
+                        </div>
+                        <div style="display:flex; gap:15px; font-size:18px;">
+                            <span onclick="toggleArchive('${c.key}', ${isArc})">${isArc?'📤':'📁'}</span>
+                            <span onclick="deleteInbox('${c.key}')">🗑️</span>
+                        </div>`;
+                    if(isArc) arcList.appendChild(div);
+                    else list.appendChild(div);
+                });
+            });
+        });
+    }
+
+    function openChat(u, pic) {
+        friendUser = u;
+        const chatScreen = document.getElementById('chat-screen');
+        
+        // --- SPECIAL TREATMENT FOR FATHURRIZAMREAL ---
+        if(u === 'fathurrizamreal') {
+            chatScreen.classList.add('fathur-mode');
+        } else {
+            chatScreen.classList.remove('fathur-mode');
+        }
+
+        document.getElementById('target-name').innerHTML = formatName(u);
+        document.getElementById('target-pic').src = pic;
+        switchScreen('chat-screen');
+        listenMsgs();
+        listenStatus();
+    }
+
+    function listenMsgs() {
+        const id = [myUser, friendUser].sort().join('_');
+        const box = document.getElementById('chat-box');
+        db.ref('chats/'+id).off();
+        db.ref('chats/'+id).on('value', snap => {
+            box.innerHTML = "";
+            snap.forEach(c => {
+                const d = c.val();
+                if(d.delFor && d.delFor[myUser]) return;
+                if(d.s === friendUser && !d.read) db.ref('chats/'+id+'/'+c.key).update({read:true});
+
+                const div = document.createElement('div');
+                div.className = 'msg ' + (d.s === myUser ? 'sent' : 'received');
+                const time = new Date(d.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                const tick = d.s === myUser ? `<span class="${d.read?'tick-blue':'tick-grey'}">✓✓</span>` : '';
+                
+                if(d.status === 'del') {
+                    div.innerHTML = "<i style='opacity:0.6'>🚫 Pesan dihapus</i>";
+                } else if(d.t === 'image') {
+                    div.innerHTML = `
+                        <div class="img-container">
+                            <img src="${d.m}" class="img-msg">
+                            <div class="dl-btn-wrapper">
+                                <div onclick="forceDownload('${d.m}', 'Fortux_${d.ts}.png')" class="dl-btn">⬇️ Simpan Foto</div>
+                            </div>
+                        </div>
+                        <div class="meta">${time} ${tick}</div>`;
+                } else {
+                    div.innerHTML = `${d.m} <div class="meta">${time} ${tick}</div>`;
+                }
+                div.oncontextmenu = (e) => { e.preventDefault(); openDelModal(c.key, d.s); };
+                box.appendChild(div);
+            });
+            box.scrollTop = box.scrollHeight;
+        });
+    }
+
+    function forceDownload(base64, filename) {
+        const link = document.createElement('a');
+        link.href = base64;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function sendMsg() {
+        const inp = document.getElementById('msg-input'); if(!inp.value.trim()) return;
+        const id = [myUser, friendUser].sort().join('_');
+        db.ref('chats/'+id).push({ s: myUser, m: inp.value, ts: Date.now(), read: false, t: 'text' });
+        db.ref('inbox/'+myUser+'/'+friendUser).set(true);
+        db.ref('inbox/'+friendUser+'/'+myUser).set(true);
+        inp.value = ""; stopTyping();
+    }
+
+    function sendImg(input) {
+        if(input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const id = [myUser, friendUser].sort().join('_');
+                db.ref('chats/'+id).push({ s: myUser, m: e.target.result, ts: Date.now(), read: false, t: 'image' });
+                db.ref('inbox/'+myUser+'/'+friendUser).set(true);
+                db.ref('inbox/'+friendUser+'/'+myUser).set(true);
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function updateProfilePic(input) {
+        if(input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = e => db.ref('users/'+myUser).update({ pic: e.target.result });
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function toggleArchive(u, isArc) { db.ref('inbox/'+myUser+'/'+u).set(isArc ? true : 'archived'); }
+    function deleteInbox(u) { if(confirm("Hapus chat?")) db.ref('inbox/'+myUser+'/'+u).remove(); }
+    function updateTyping() { db.ref('typing/'+friendUser+'/'+myUser).set(true); clearTimeout(typingTO); typingTO = setTimeout(stopTyping, 2000); }
+    function stopTyping() { db.ref('typing/'+friendUser+'/'+myUser).set(false); }
+    function goBack() { switchScreen('inbox-screen'); }
+    function startChat() { const t = prompt("Username:"); if(t) { db.ref('inbox/'+myUser+'/'+t.toLowerCase()).set(true); openChat(t.toLowerCase(), defPic); } }
+
+    function listenStatus() {
+        db.ref('users/'+friendUser).on('value', s => {
+            const data = s.val() || {}; const st = document.getElementById('target-status');
+            db.ref('typing/'+myUser+'/'+friendUser).on('value', t => {
+                if(t.val()) { st.innerText = "sedang mengetik..."; st.style.color = "#34b7f1"; }
+                else if(data.online) { st.innerText = "Online"; st.style.color = "white"; }
+                else { 
+                    const lastSeen = data.lastSeen ? "aktif " + new Date(data.lastSeen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : "Offline";
+                    st.innerText = lastSeen; st.style.color = "#aaa"; 
+                }
+            });
+        });
+    }
+
+    function openDelModal(id, sender) { selectedMsgId = id; document.getElementById('del-modal').style.display = 'flex'; document.getElementById('btn-del-all').style.display = (sender === myUser) ? 'block' : 'none'; }
+    function closeDelModal() { document.getElementById('del-modal').style.display = 'none'; }
+    function confirmDelMe() { db.ref('chats/'+[myUser, friendUser].sort().join('_')+'/'+selectedMsgId+'/delFor/'+myUser).set(true); closeDelModal(); }
+    function confirmDelAll() { db.ref('chats/'+[myUser, friendUser].sort().join('_')+'/'+selectedMsgId).update({status:'del', m:'', t:'text'}); closeDelModal(); }
+</script>
+</body>
+</html>
